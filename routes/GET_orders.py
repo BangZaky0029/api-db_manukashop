@@ -40,9 +40,49 @@ reference_data = {
     ]
 }
 
+# GET: Ambil Data reference 
 @orders_bp.route("/api/references", methods=["GET"])
 def get_references():
     return jsonify(reference_data)
+
+# GET: Ambil semua data Dari table_produksi
+@orders_bp.route('/api/get_table_prod', methods=['GET'])
+def get_all_table_prod():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = "SELECT * FROM table_prod"
+        cursor.execute(query)
+        results = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "data": results}), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
+# GET: Ambil semua data Dari table_produksi
+@orders_bp.route('/api/get_table_design', methods=['GET'])
+def get_all_table_design():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = "SELECT * FROM table_design"
+        cursor.execute(query)
+        results = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "data": results}), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # GET: Ambil semua data pesanan
 @orders_bp.route('/api/get-orders', methods=['GET'])
@@ -76,62 +116,6 @@ def get_inputOrder():
     finally:
         if conn.is_connected(): 
             cursor.close()
-            conn.close()
-
-# POST: Create a new input order with automatic transfer to table_pesanan
-@orders_bp.route('/api/create-input-order', methods=['POST'])
-def create_input_order():
-    conn = None
-    cursor = None
-    try:
-        data = request.get_json()
-        required_fields = ['id_input', 'id_pesanan', 'Platform', 'qty', 'Deadline']
-        
-        for field in required_fields:
-            if field not in data or not data[field]:
-                return jsonify({'status': 'error', 'message': f'Field {field} is required'}), 400
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Insert into table_input_order
-        fields = []
-        values = []
-        placeholders = []
-        
-        for key, value in data.items():
-            fields.append(key)
-            values.append(value)
-            placeholders.append('%s')
-        
-        # Add TimeTemp field if not provided
-        if 'TimeTemp' not in fields:
-            fields.append('TimeTemp')
-            values.append(datetime.now().strftime('%Y-%m-%d'))
-            placeholders.append('%s')
-        
-        query = f"INSERT INTO table_input_order ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
-        cursor.execute(query, values)
-        
-        # Synchronize to table_pesanan
-        sync_result = sync_to_pesanan(cursor, data['id_input'])
-        if not sync_result['success']:
-            conn.rollback()
-            return jsonify({'status': 'error', 'message': sync_result['message']}), 500
-        
-        conn.commit()
-        return jsonify({'status': 'success', 'message': 'Data berhasil disimpan dan disinkronkan'}), 201
-    
-    except Exception as e:
-        logger.error(f"Error creating input order: {str(e)}")
-        if conn:
-            conn.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-    
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
             conn.close()
 
 # Function to sync a single record from table_input_order to table_pesanan
@@ -175,6 +159,8 @@ def sync_to_pesanan(cursor, id_input):
         logger.error(f"Error syncing to pesanan: {str(e)}")
         return {'success': False, 'message': str(e)}
 
+
+
 # Function to sync all records - can be called manually or periodically
 def sync_all_to_pesanan():
     conn = None
@@ -216,24 +202,6 @@ def sync_all_to_pesanan():
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
-
-# Endpoint to manually trigger sync all
-@orders_bp.route('/api/sync-all-orders', methods=['POST'])
-def trigger_sync_all():
-    try:
-        result = sync_all_to_pesanan()
-        if result['success']:
-            return jsonify({
-                'status': 'success', 
-                'message': 'Sync completed', 
-                'success_count': result['success_count'],
-                'error_count': result['error_count']
-            }), 200
-        else:
-            return jsonify({'status': 'error', 'message': result['message']}), 500
-    except Exception as e:
-        logger.error(f"Error triggering sync: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # PUT: Update input order with automatic sync to pesanan
 @orders_bp.route('/api/update-input-order/<string:id_input>', methods=['PUT'])
@@ -294,54 +262,6 @@ def update_input_order(id_input):
         if conn and conn.is_connected():
             conn.close()
 
-# DELETE: Hapus pesanan berdasarkan ID
-@orders_bp.route('/api/delete-order/<id_input>', methods=['DELETE'])
-def delete_order(id_input):
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Pastikan tidak ada transaksi yang menggantung
-        conn.commit()
-
-        # Sanitize input by stripping whitespace and newline characters
-        id_input = id_input.strip()
-
-        # Cek apakah pesanan ada
-        cursor.execute("SELECT id_input FROM table_pesanan WHERE id_input = %s", (id_input,))
-        existing_order = cursor.fetchone()
-
-        if not existing_order:
-            return jsonify({'status': 'error', 'message': 'Pesanan tidak ditemukan'}), 404
-
-        # Mulai transaksi baru setelah commit
-        conn.start_transaction()
-
-        # Hapus data di table_input_order terlebih dahulu untuk menjaga integritas data
-        cursor.execute("DELETE FROM table_input_order WHERE id_input = %s", (id_input,))
-
-        # Hapus data di table_pesanan
-        cursor.execute("DELETE FROM table_pesanan WHERE id_input = %s", (id_input,))
-
-        # Commit transaksi
-        conn.commit()
-
-        return jsonify({'status': 'success', 'message': 'Pesanan dan data terkait berhasil dihapus'}), 200
-
-    except Exception as e:
-        if conn:
-            conn.rollback()  # Rollback jika terjadi error
-        logger.error(f"Error deleting order: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Gagal menghapus pesanan: {str(e)}'}), 500
-
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
-
 # GET: Ambil daftar nama dari masing-masing tabel
 @orders_bp.route('/api/get-names', methods=['GET'])
 def get_names():
@@ -376,80 +296,7 @@ def get_names():
         if conn and conn.is_connected():
             conn.close()
 
-# PUT: Update pesanan
-@orders_bp.route('/api/update-order', methods=['PUT'])
-def update_order():
-    try:
-        data = request.get_json()
-        id_input = data.get('id_input')  # ID Pesanan
-        column = data.get('column')  # Kolom yang diubah
-        value = data.get('value')  # Nilai baru
-
-        allowed_columns = ["desainer", "penjahit", "qc"]
-
-        if column not in allowed_columns:
-            return jsonify({'status': 'error', 'message': 'Kolom tidak valid'}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Update table_pesanan
-        query = f"UPDATE table_pesanan SET {column} = %s WHERE id_input = %s"
-        cursor.execute(query, (value, id_input))
-        
-        conn.commit()  
-
-        logger.info(f"Update berhasil: {column} -> {value} untuk id_input: {id_input}")
-
-        return jsonify({'status': 'success', 'message': f'{column} berhasil diperbarui'}), 200
-    except Exception as e:
-        logger.error(f"Error update pesanan: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-# PUT: Update print status and layout
-@orders_bp.route('/api/update-print-status-layout', methods=['PUT'])
-def update_print_status():
-    try:
-        data = request.get_json()
-        id_input = data.get('id_input')
-        column = data.get('column')
-        value = data.get('value')
-
-        allowed_columns = ["desainer", "print_status", "layout_link", "penjahit", "qc", "kurir", "admin", "print_status", "layout_link"]
-
-        if column not in allowed_columns:
-            return jsonify({'status': 'error', 'message': 'Kolom tidak valid'}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Update table_pesanan using id_input
-        query = f"UPDATE table_pesanan SET {column} = %s WHERE id_input = %s"
-        cursor.execute(query, (value, id_input))
-        
-        # Check if we need to update table_input_order as well
-        if column in ['print_status', 'layout_link']:
-            if column == 'layout_link':
-                cursor.execute("UPDATE table_input_order SET link = %s WHERE id_input = %s", (value, id_input))
-
-        conn.commit()  
-
-        logger.info(f"Update berhasil: {column} -> {value} untuk id_input: {id_input}")
-
-        return jsonify({'status': 'success', 'message': f'{column} berhasil diperbarui'}), 200
-    except Exception as e:
-        logger.error(f"Error update pesanan: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-# GET: Ambil link foto berdasarkan id_pesanan
+# GET: Ambil link foto berdasarkan id_input
 @orders_bp.route('/api/get_link_foto/<string:id_input>', methods=['GET'])
 def get_order_photo(id_input):
     try:
@@ -500,6 +347,81 @@ def transfer_orders():
     except Exception as e:
         logger.error(f"Error in transfer_orders: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# POST: Create a new input order with automatic transfer to table_pesanan
+@orders_bp.route('/api/create-input-order', methods=['POST'])
+def create_input_order():
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json()
+        required_fields = ['id_input', 'id_pesanan', 'Platform', 'qty', 'Deadline']
+        
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'status': 'error', 'message': f'Field {field} is required'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Insert into table_input_order
+        fields = []
+        values = []
+        placeholders = []
+        
+        for key, value in data.items():
+            fields.append(key)
+            values.append(value)
+            placeholders.append('%s')
+        
+        # Add TimeTemp field if not provided
+        if 'TimeTemp' not in fields:
+            fields.append('TimeTemp')
+            values.append(datetime.now().strftime('%Y-%m-%d'))
+            placeholders.append('%s')
+        
+        query = f"INSERT INTO table_input_order ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
+        cursor.execute(query, values)
+        
+        # Synchronize to table_pesanan
+        sync_result = sync_to_pesanan(cursor, data['id_input'])
+        if not sync_result['success']:
+            conn.rollback()
+            return jsonify({'status': 'error', 'message': sync_result['message']}), 500
+        
+        conn.commit()
+        return jsonify({'status': 'success', 'message': 'Data berhasil disimpan dan disinkronkan'}), 201
+    
+    except Exception as e:
+        logger.error(f"Error creating input order: {str(e)}")
+        if conn:
+            conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+# Endpoint to manually trigger sync all
+@orders_bp.route('/api/sync-all-orders', methods=['POST'])
+def trigger_sync_all():
+    try:
+        result = sync_all_to_pesanan()
+        if result['success']:
+            return jsonify({
+                'status': 'success', 
+                'message': 'Sync completed', 
+                'success_count': result['success_count'],
+                'error_count': result['error_count']
+            }), 200
+        else:
+            return jsonify({'status': 'error', 'message': result['message']}), 500
+    except Exception as e:
+        logger.error(f"Error triggering sync: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 
 # Database trigger function (will need to be implemented in MySQL as well)
 def trigger_function():
