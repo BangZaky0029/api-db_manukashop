@@ -1,76 +1,77 @@
-from flask import Blueprint, request, jsonify
-from flask import Flask
+from flask import Blueprint, request, jsonify, Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from project_api.db import get_db_connection
-import logging  
+import logging
 
+# 🔹 Inisialisasi Flask & WebSocket
 app = Flask(__name__)
+CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")  # ✅ Aktifkan WebSocket
 
+# 🔹 Inisialisasi Blueprint
 update_design_bp = Blueprint('design', __name__)
 CORS(update_design_bp)
 
-# 🔹 Konfigurasi logger
+# 🔹 Konfigurasi Logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@app.route('/')
+def index():
+    return "Server Flask-SocketIO berjalan!"
+
+@socketio.on('connect')
+def handle_connect():
+    logger.info("✅ Klien terhubung ke WebSocket!")
+
+# 🔹 Endpoint: Update Data Desain
 @update_design_bp.route('/api/update-design', methods=['PUT'])
 def update_design():
-    conn = None
-    cursor = None
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
     try:
-        # 🔸 Ambil data dari request JSON
         data = request.get_json()
         id_input = data.get('id_input')
-        id_desain = data.get('id_desain', None)  # Foreign Key dari table_desainer
+        id_desain = data.get('id_desain')
         layout_link = data.get('layout_link')
-        status_print = data.get('status_print')  # Akan diupdate sebagai print_status di table_pesanan
+        status_print = data.get('status_print')
 
-        # 🔸 Validasi input
         if not id_input:
             return jsonify({'status': 'error', 'message': 'id_input wajib diisi'}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # 🔹 Periksa apakah `id_input` ada di `table_design`
+        # 🔹 Periksa apakah `id_input` ada di table_design
         cursor.execute("SELECT id_input FROM table_design WHERE id_input = %s", (id_input,))
-        existing_design = cursor.fetchone()
-
-        if not existing_design:
+        if not cursor.fetchone():
             return jsonify({'status': 'error', 'message': 'Data tidak ditemukan di table_design'}), 404
 
-        # 🔹 Update table_design terlebih dahulu
-        update_design_fields = []
-        update_design_values = []
+        # 🔹 Update table_design
+        update_fields = []
+        values = []
 
         if id_desain is not None:
-            update_design_fields.append("id_desain = %s")
-            update_design_values.append(id_desain)
-
+            update_fields.append("id_desain = %s")
+            values.append(id_desain)
         if layout_link is not None:
-            update_design_fields.append("Layout_link = %s")
-            update_design_values.append(layout_link)
-
+            update_fields.append("Layout_link = %s")
+            values.append(layout_link)
         if status_print is not None:
-            update_design_fields.append("status_print = %s")
-            update_design_values.append(status_print)
+            update_fields.append("status_print = %s")
+            values.append(status_print)
 
-        if update_design_fields:
-            update_design_values.append(id_input)
-            query_update_design = f"UPDATE table_design SET {', '.join(update_design_fields)} WHERE id_input = %s"
-            cursor.execute(query_update_design, update_design_values)
+        if update_fields:
+            values.append(id_input)
+            query_update = f"UPDATE table_design SET {', '.join(update_fields)} WHERE id_input = %s"
+            cursor.execute(query_update, values)
 
-        # 🔹 Periksa apakah `id_input` ada di `table_pesanan`
-        cursor.execute("SELECT id_input FROM table_pesanan WHERE id_input = %s", (id_input,))
-        existing_pesanan = cursor.fetchone()
+        # 🔹 Sinkronisasi ke table_prod jika status_print berubah
+        if status_print is not None:
+            cursor.execute("UPDATE table_prod SET status_print = %s WHERE id_input = %s", (status_print, id_input))
+            logger.info(f"✅ status_print diperbarui di table_prod untuk id_input: {id_input}")
 
-        if not existing_pesanan:
-            return jsonify({'status': 'error', 'message': 'id_input tidak ditemukan di table_pesanan'}), 404
-
-        # 🔹 Pindahkan data dari table_design ke table_pesanan
-        query_sync_pesanan = """
+        # 🔹 Sinkronisasi ke table_pesanan
+        cursor.execute("""
             UPDATE table_pesanan p
             JOIN table_design d ON p.id_input = d.id_input
             SET 
@@ -78,8 +79,7 @@ def update_design():
                 p.layout_link = d.Layout_link,
                 p.print_status = d.status_print
             WHERE p.id_input = %s
-        """
-        cursor.execute(query_sync_pesanan, (id_input,))
+        """, (id_input,))
 
         # 🔹 Commit perubahan
         conn.commit()
@@ -88,24 +88,24 @@ def update_design():
         # 🔹 Kirim event WebSocket ke frontend
         socketio.emit('update_event', {'id_input': id_input, 'message': 'Data telah diperbarui'})
 
-        return jsonify({'status': 'success', 'message': 'Data berhasil diperbarui & disinkronkan ke table_pesanan'}), 200
+        return jsonify({'status': 'success', 'message': 'Data berhasil diperbarui & disinkronkan'}), 200
 
     except Exception as e:
         logger.error(f"❌ Error update pesanan: {str(e)}")
-        if conn:
-            conn.rollback()
+        conn.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
     finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+        cursor.close()
+        conn.close()
 
 
-# PUT: Update print status and layout di `table_design`, lalu sinkron ke `table_pesanan`
+# 🔹 Endpoint: Update Status Print & Layout
 @update_design_bp.route('/api/update-print-status-layout', methods=['PUT'])
 def update_print_status():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
     try:
         data = request.get_json()
         id_input = data.get('id_input')
@@ -117,16 +117,12 @@ def update_print_status():
         if column not in allowed_columns:
             return jsonify({'status': 'error', 'message': 'Kolom tidak valid'}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
         # 🔹 Update table_design berdasarkan id_input
-        query_update_design = f"UPDATE table_design SET {column} = %s WHERE id_input = %s"
-        cursor.execute(query_update_design, (value, id_input))
+        cursor.execute(f"UPDATE table_design SET {column} = %s WHERE id_input = %s", (value, id_input))
 
-        # 🔹 Sinkronkan perubahan ke table_pesanan
+        # 🔹 Sinkronisasi ke table_pesanan jika kolom termasuk yang relevan
         if column in ['id_desain', 'status_print', 'layout_link']:
-            sync_query = """
+            cursor.execute("""
                 UPDATE table_pesanan p
                 JOIN table_design d ON p.id_input = d.id_input
                 SET 
@@ -134,26 +130,36 @@ def update_print_status():
                     p.layout_link = d.Layout_link,
                     p.print_status = d.status_print
                 WHERE p.id_input = %s
-            """
-            cursor.execute(sync_query, (id_input,))
+            """, (id_input,))
 
-        conn.commit()  
+        # 🔹 🔥 Sinkronisasi ke table_prod jika status_print diperbarui
+        if column == "status_print":
+            cursor.execute("SELECT id_input FROM table_prod WHERE id_input = %s", (id_input,))
+            existing_prod = cursor.fetchone()
+            
+            if existing_prod:
+                cursor.execute("UPDATE table_prod SET status_print = %s WHERE id_input = %s", (value, id_input))
+                logger.info(f"✅ status_print diperbarui di table_prod untuk id_input: {id_input}")
 
-        logger.info(f"✅ {column} berhasil diperbarui untuk id_input: {id_input}")
+        conn.commit()
+
+        logger.info(f"✅ {column} diperbarui untuk id_input: {id_input}")
 
         # 🔹 Kirim event WebSocket ke frontend
         socketio.emit('update_event', {'id_input': id_input, 'message': f'{column} diperbarui'})
 
         return jsonify({'status': 'success', 'message': f'{column} berhasil diperbarui & disinkronkan'}), 200
+
     except Exception as e:
         logger.error(f"❌ Error update pesanan: {str(e)}")
+        conn.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        cursor.close()
+        conn.close()
 
 
 # 🔹 Jalankan Flask dengan WebSocket
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, host="0.0.0.0", port=5000)
