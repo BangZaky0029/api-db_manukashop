@@ -16,27 +16,27 @@ CORS(orders_bp)
 # Reference data for names
 reference_data = {
     "table_admin": [
-        {"ID": 1001, "Nama": "Lilis"},
-        {"ID": 1002, "Nama": "Ina"}
+        {"ID": 1001, "nama": "Lilis"},
+        {"ID": 1002, "nama": "Ina"}
     ],
     "table_desainer": [
-        {"ID": 1101, "Nama": "IMAM"},
-        {"ID": 1102, "Nama": "JHODI"}
+        {"ID": 1101, "nama": "IMAM"},
+        {"ID": 1102, "nama": "JHODI"}
     ],
     "table_kurir": [
-        {"ID": 1501, "Nama": "teddy"},
-        {"ID": 1502, "Nama": "Mas Nur"},
-        {"ID": 1503, "Nama": "Jhodi"}
+        {"ID": 1501, "nama": "teddy"},
+        {"ID": 1502, "nama": "Mas Nur"},
+        {"ID": 1503, "nama": "Jhodi"}
     ],
     "table_penjahit": [
-        {"ID": 1301, "Nama": "Mas Ari"},
-        {"ID": 1302, "Nama": "Mas Saep"},
-        {"ID": 1303, "Nama": "Mas Egeng"}
+        {"ID": 1301, "nama": "Mas Ari"},
+        {"ID": 1302, "nama": "Mas Saep"},
+        {"ID": 1303, "nama": "Mas Egeng"}
     ],
     "table_qc": [
-        {"ID": 1401, "Nama": "tita"},
-        {"ID": 1402, "Nama": "ina"},
-        {"ID": 1403, "Nama": "lilis"}
+        {"ID": 1401, "nama": "tita"},
+        {"ID": 1402, "nama": "ina"},
+        {"ID": 1403, "nama": "lilis"}
     ]
 }
 

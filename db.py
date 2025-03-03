@@ -5,7 +5,7 @@ def get_db_connection():
         host="localhost",
         user="root",
         password="",
-        database="db_manukashop",
+        database="db_mnk",
         autocommit=True  # Tambahkan autocommit di sini
     )
     return conn

@@ -1,90 +1,78 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Flask
 from flask_cors import CORS
 from project_api.db import get_db_connection
 import logging
 
-# Initialize Blueprint
+# 🔹 Inisialisasi Flask
+app = Flask(__name__)
+CORS(app)
+
+# 🔹 Initialize Blueprint
 sync_prod_bp = Blueprint('sync_prod', __name__)
 CORS(sync_prod_bp)
 
-# Configure Logger
+# 🔹 Configure Logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @sync_prod_bp.route('/api/sync-prod-to-pesanan', methods=['PUT'])
 def sync_prod_to_pesanan():
-    conn = None  # 🔹 Pastikan `conn` diinisialisasi di awal
-    cursor = None  
+    """ API untuk mengupdate data produksi dan menyinkronkannya ke table_pesanan """
+    
+    if request.content_type != "application/json":
+        return jsonify({"message": "Invalid Content-Type"}), 400
 
     try:
-        # Ambil data dari request JSON
+        # 🔹 Ambil data dari request JSON
         data = request.get_json()
         id_input = data.get('id_input')
-        Penjahit = data.get('Penjahit')
-        qc = data.get('qc')
-        Status_Produksi = data.get('Status_Produksi')
+        id_penjahit = data.get('id_penjahit')
+        id_qc = data.get('id_qc')
+        status_produksi = data.get('status_produksi')
 
-        # Validasi input
         if not id_input:
             return jsonify({'status': 'error', 'message': 'id_input wajib diisi'}), 400
-        
-        if all(v is None for v in [Penjahit, qc, Status_Produksi]):
-            return jsonify({'status': 'error', 'message': 'Minimal satu field harus diisi untuk update'}), 400
 
         # 🔹 Inisialisasi koneksi database
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # 🔹 Cek apakah id_input ada di table_prod
-        cursor.execute("SELECT id_input FROM table_prod WHERE id_input = %s", (id_input,))
+        # 🔹 Cek apakah id_input ada di database
+        cursor.execute("SELECT * FROM table_prod WHERE id_input = %s", (id_input,))
         if not cursor.fetchone():
             return jsonify({'status': 'error', 'message': 'Data tidak ditemukan di table_prod'}), 404
 
-        # 🔹 Cek apakah id_input ada di table_pesanan
-        cursor.execute("SELECT id_input FROM table_pesanan WHERE id_input = %s", (id_input,))
+        cursor.execute("SELECT * FROM table_pesanan WHERE id_input = %s", (id_input,))
         if not cursor.fetchone():
             return jsonify({'status': 'error', 'message': 'Data tidak ditemukan di table_pesanan'}), 404
 
-        # 🔹 Update table_prod jika ada perubahan
+        # 🔹 Kumpulkan data yang akan diupdate
         update_fields = []
         update_values = []
+        if id_penjahit is not None:
+            update_fields.append("id_penjahit = %s")
+            update_values.append(id_penjahit)
+        if id_qc is not None:
+            update_fields.append("id_qc = %s")
+            update_values.append(id_qc)
+        if status_produksi is not None:
+            update_fields.append("status_produksi = %s")
+            update_values.append(status_produksi)
 
-        if Penjahit is not None:
-            update_fields.append("Penjahit = %s")  # Sudah diperbaiki dari "Panjahit"
-            update_values.append(Penjahit)
-
-        if qc is not None:
-            update_fields.append("qc = %s")
-            update_values.append(qc)
-
-        if Status_Produksi is not None:
-            update_fields.append("Status_Produksi = %s")
-            update_values.append(Status_Produksi)
-
+        # 🔹 Eksekusi query update jika ada perubahan
         if update_fields:
             update_values.append(id_input)
-            query_update_prod = f"UPDATE table_prod SET {', '.join(update_fields)} WHERE id_input = %s"
-            cursor.execute(query_update_prod, update_values)
-            logger.info(f"✅ Update table_prod berhasil untuk id_input: {id_input}")
+            query_update = f"UPDATE table_prod SET {', '.join(update_fields)} WHERE id_input = %s"
+            cursor.execute(query_update, update_values)
 
-        # 🔹 Sinkronisasi otomatis ke table_pesanan
-        cursor.execute("""
-            UPDATE table_pesanan p
-            JOIN table_prod t ON p.id_input = t.id_input
-            SET 
-                p.penjahit = t.Penjahit,
-                p.qc = t.qc,
-                p.Status_Produksi = t.Status_Produksi
-            WHERE p.id_input = %s
-        """, (id_input,))
+            query_update_pesanan = f"UPDATE table_pesanan SET {', '.join(update_fields)} WHERE id_input = %s"
+            cursor.execute(query_update_pesanan, update_values)
 
-        conn.commit()
-        logger.info(f"✅ Sinkronisasi ke table_pesanan berhasil untuk id_input: {id_input}")
+            # 🔹 Commit perubahan ke database
+            conn.commit()
+            logger.info(f"✅ Data produksi berhasil diperbarui untuk id_input: {id_input}")
 
-        return jsonify({
-            'status': 'success',
-            'message': 'Data produksi berhasil diperbarui & disinkronkan ke table_pesanan'
-        }), 200
+        return jsonify({'status': 'success', 'message': 'Data produksi berhasil diperbarui'}), 200
 
     except Exception as e:
         logger.error(f"❌ Error update data produksi: {str(e)}")
@@ -97,4 +85,3 @@ def sync_prod_to_pesanan():
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
-

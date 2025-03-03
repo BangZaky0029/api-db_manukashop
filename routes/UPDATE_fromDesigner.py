@@ -34,27 +34,27 @@ def update_design():
     try:
         data = request.get_json()
         id_input = data.get('id_input')
-        id_desain = data.get('id_desain')
+        id_designer = data.get('id_designer')
         layout_link = data.get('layout_link')
         status_print = data.get('status_print')
 
         if not id_input:
             return jsonify({'status': 'error', 'message': 'id_input wajib diisi'}), 400
 
-        # 🔹 Periksa apakah `id_input` ada di table_design
+        # Periksa apakah id_input ada di table_design
         cursor.execute("SELECT id_input FROM table_design WHERE id_input = %s", (id_input,))
         if not cursor.fetchone():
             return jsonify({'status': 'error', 'message': 'Data tidak ditemukan di table_design'}), 404
 
-        # 🔹 Update table_design
+        # Update table_design
         update_fields = []
         values = []
 
-        if id_desain is not None:
-            update_fields.append("id_desain = %s")
-            values.append(id_desain)
+        if id_designer is not None:
+            update_fields.append("id_designer = %s")
+            values.append(id_designer)
         if layout_link is not None:
-            update_fields.append("Layout_link = %s")
+            update_fields.append("layout_link = %s")
             values.append(layout_link)
         if status_print is not None:
             update_fields.append("status_print = %s")
@@ -65,27 +65,27 @@ def update_design():
             query_update = f"UPDATE table_design SET {', '.join(update_fields)} WHERE id_input = %s"
             cursor.execute(query_update, values)
 
-        # 🔹 Sinkronisasi ke table_prod jika status_print berubah
-        if status_print is not None:
-            cursor.execute("UPDATE table_prod SET status_print = %s WHERE id_input = %s", (status_print, id_input))
-            logger.info(f"✅ status_print diperbarui di table_prod untuk id_input: {id_input}")
-
-        # 🔹 Sinkronisasi ke table_pesanan
+        # Sinkronisasi ke table_pesanan
         cursor.execute("""
             UPDATE table_pesanan p
             JOIN table_design d ON p.id_input = d.id_input
             SET 
-                p.desainer = d.id_desain,
-                p.layout_link = d.Layout_link,
-                p.print_status = d.status_print
+                p.id_desainer = d.id_designer,
+                p.layout_link = d.layout_link,
+                p.status_print = d.status_print
             WHERE p.id_input = %s
         """, (id_input,))
 
-        # 🔹 Commit perubahan
+        # Sinkronisasi ke table_prod jika status_print berubah
+        if status_print is not None:
+            logger.info(f"🟢 Memperbarui status_print di table_prod untuk id_input: {id_input}")
+            cursor.execute("UPDATE table_prod SET status_print = %s WHERE id_input = %s", (status_print, id_input))
+            logger.info(f"✅ status_print diperbarui di table_prod untuk id_input: {id_input}")
+
         conn.commit()
         logger.info(f"✅ Update berhasil untuk id_input: {id_input}")
 
-        # 🔹 Kirim event WebSocket ke frontend
+        # Kirim event WebSocket ke frontend
         socketio.emit('update_event', {'id_input': id_input, 'message': 'Data telah diperbarui'})
 
         return jsonify({'status': 'success', 'message': 'Data berhasil diperbarui & disinkronkan'}), 200
@@ -112,27 +112,28 @@ def update_print_status():
         column = data.get('column')
         value = data.get('value')
 
-        allowed_columns = ["id_desain", "status_print", "layout_link", "Platform", "qty", "Deadline", "Aksi"]
+        # Corrected column names to match table_design structure
+        allowed_columns = ["id_designer", "status_print", "layout_link", "platform", "qty", "deadline"]
 
         if column not in allowed_columns:
             return jsonify({'status': 'error', 'message': 'Kolom tidak valid'}), 400
 
-        # 🔹 Update table_design berdasarkan id_input
+        # Update table_design berdasarkan id_input
         cursor.execute(f"UPDATE table_design SET {column} = %s WHERE id_input = %s", (value, id_input))
 
-        # 🔹 Sinkronisasi ke table_pesanan jika kolom termasuk yang relevan
-        if column in ['id_desain', 'status_print', 'layout_link']:
+        # Sinkronisasi ke table_pesanan jika kolom termasuk yang relevan
+        if column in ['id_designer', 'status_print', 'layout_link']:
             cursor.execute("""
                 UPDATE table_pesanan p
                 JOIN table_design d ON p.id_input = d.id_input
                 SET 
-                    p.desainer = d.id_desain,
-                    p.layout_link = d.Layout_link,
-                    p.print_status = d.status_print
+                    p.id_desainer = d.id_designer,
+                    p.layout_link = d.layout_link,
+                    p.status_print = d.status_print
                 WHERE p.id_input = %s
             """, (id_input,))
 
-        # 🔹 🔥 Sinkronisasi ke table_prod jika status_print diperbarui
+        # Sinkronisasi ke table_prod jika status_print diperbarui
         if column == "status_print":
             cursor.execute("SELECT id_input FROM table_prod WHERE id_input = %s", (id_input,))
             existing_prod = cursor.fetchone()
@@ -145,7 +146,7 @@ def update_print_status():
 
         logger.info(f"✅ {column} diperbarui untuk id_input: {id_input}")
 
-        # 🔹 Kirim event WebSocket ke frontend
+        # Kirim event WebSocket ke frontend
         socketio.emit('update_event', {'id_input': id_input, 'message': f'{column} diperbarui'})
 
         return jsonify({'status': 'success', 'message': f'{column} berhasil diperbarui & disinkronkan'}), 200
