@@ -31,7 +31,9 @@ reference_data = {
     "table_penjahit": [
         {"ID": 1301, "nama": "Mas Ari"},
         {"ID": 1302, "nama": "Mas Saep"},
-        {"ID": 1303, "nama": "Mas Egeng"}
+        {"ID": 1303, "nama": "Mas Egeng"},
+        {"ID": 1304, "nama": "Maman"},
+        {"ID": 1305, "nama": "Mas Uu"}
     ],
     "table_qc": [
         {"ID": 1401, "nama": "tita"},
@@ -44,6 +46,30 @@ reference_data = {
 @orders_bp.route("/api/references", methods=["GET"])
 def get_references():
     return jsonify(reference_data)
+
+# GET : id_admin from table_input_order
+@orders_bp.route('/api/get_id_admin/<string:id_input>', methods=['GET'])
+def get_id_admin(id_input):
+    """ Mendapatkan id_admin berdasarkan id_input dari table_input_order """
+    try:
+        id_input = id_input.strip()  # Hapus spasi atau karakter tersembunyi
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT id_admin FROM table_input_order WHERE id_input = %s", (id_input,))
+        result = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        if result:
+            return jsonify({"status": "success", "id_admin": result["id_admin"]}), 200
+        else:
+            return jsonify({"status": "error", "message": "ID Input tidak ditemukan"}), 404
+
+    except Exception as e:
+        logger.error(f"❌ Error mendapatkan id_admin: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # GET: Ambil semua data Dari table_produksi
 @orders_bp.route('/api/get_table_prod', methods=['GET'])

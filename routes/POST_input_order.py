@@ -129,13 +129,13 @@ def input_order():
             VALUES (%s, %s, %s, %s, %s, %s, 'EDITING', NOW())
             """
         ]
-        
+
         params = [
             (common_values['id_input'], common_values['platform'], common_values['qty'], common_values['deadline']),
             (common_values['id_input'], common_values['id_designer'], common_values['platform'], 
-             common_values['qty'], common_values['link'], common_values['deadline'])
+            common_values['qty'], None, common_values['deadline'])  # FIXED! Tidak mengambil 'link' dari table_input_order
         ]
-        
+
         for query, param in zip(queries, params):
             cursor.execute(query, param)
 
