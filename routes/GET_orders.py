@@ -47,6 +47,35 @@ reference_data = {
 def get_references():
     return jsonify(reference_data)
 
+# GET : Mengurutkan data berdasarkan deadline terdekat 
+@orders_bp.route('/api/get_sorted_orders', methods=['GET'])
+def get_sorted_orders():
+    """ Mengambil dan mengurutkan pesanan berdasarkan deadline terdekat hingga terjauh """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Query untuk mendapatkan data dan mengurutkan berdasarkan deadline ASC (terdekat dulu)
+        cursor.execute("SELECT * FROM table_pesanan ORDER BY deadline ASC")
+        result = cursor.fetchall()
+
+        # Konversi deadline ke format YYYY-MM-DD
+        for order in result:
+            if order["deadline"]:
+                order["deadline"] = order["deadline"].strftime("%Y-%m-%d")  # Format deadline
+
+
+        cursor.close()
+        conn.close()
+
+        if result:
+            return jsonify({"orders": result}), 200
+        else:
+            return jsonify({"error": "Tidak ada data pesanan"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 # GET : id_admin from table_input_order
 @orders_bp.route('/api/get_id_admin/<string:id_input>', methods=['GET'])
 def get_id_admin(id_input):
@@ -98,6 +127,30 @@ def get_nama_ket(id_input):
             cursor.close()
         if conn:
             conn.close()
+
+# Endpoint untuk mengambil semua data dari table_urgent
+@orders_bp.route('/api/get_table_urgent', methods=['GET'])
+def get_all_table_urgent():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Ambil semua data dari table_urgent
+        cursor.execute("SELECT * FROM table_urgent ORDER BY deadline ASC")
+        data = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        # Perbaiki format response agar sesuai dengan fetchOrders()
+        return jsonify({
+            "status": "success",
+            "data": data
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # GET: Ambil semua data Dari table_produksi
 @orders_bp.route('/api/get_table_prod', methods=['GET'])

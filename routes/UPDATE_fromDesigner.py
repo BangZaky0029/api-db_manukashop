@@ -55,6 +55,8 @@ def sync_tables(id_input, conn, cursor, columns=None):
     if columns and "status_print" in columns:
         cursor.execute("UPDATE table_prod SET status_print = %s WHERE id_input = %s", (columns["status_print"], id_input))
         logger.info(f"✅ status_print diperbarui di table_prod untuk id_input: {id_input}")
+        cursor.execute("UPDATE table_urgent SET status_print = %s WHERE id_input = %s", (columns["status_print"], id_input))
+        logger.info(f"✅ status_print diperbarui di table_urgent untuk id_input: {id_input}")
 
 
 @update_design_bp.route('/api/update-design', methods=['PUT'])

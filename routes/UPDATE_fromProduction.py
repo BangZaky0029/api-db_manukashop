@@ -88,8 +88,9 @@ def sync_prod_to_pesanan():
         update_values.append(id_input)
         query_update = f"UPDATE table_prod SET {', '.join(update_fields)} WHERE id_input = %s"
         query_update_pesanan = f"UPDATE table_pesanan SET {', '.join(update_fields)} WHERE id_input = %s"
+        query_update_urgent = f"UPDATE table_urgent SET {', '.join(update_fields)} WHERE id_input = %s"
 
-        if execute_update(query_update, update_values) and execute_update(query_update_pesanan, update_values):
+        if execute_update(query_update, update_values) and execute_update(query_update_pesanan, update_values) and execute_update(query_update_urgent, update_values):
             logger.info(f"✅ Data produksi berhasil diperbarui untuk id_input: {id_input}")
             
             # 🔹 Perbarui timestamp_penjahit jika id_penjahit berubah
