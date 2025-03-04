@@ -34,8 +34,8 @@ def delete_order(id_input):
         # Mulai transaksi
         conn.start_transaction()
 
-        # Hapus dari semua tabel yang berhubungan
-        tables_to_delete = ["table_input_order", "table_pesanan", "table_prod"]  # Tambahkan tabel lain jika perlu
+        # Hapus dari semua tabel yang berhubungan (termasuk table_urgent)
+        tables_to_delete = ["table_input_order", "table_pesanan", "table_prod", "table_urgent"]  
         for table in tables_to_delete:
             cursor.execute(f"DELETE FROM {table} WHERE id_input = %s", (id_input,))
 
