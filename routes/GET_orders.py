@@ -70,6 +70,34 @@ def get_id_admin(id_input):
     except Exception as e:
         logger.error(f"❌ Error mendapatkan id_admin: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+# GET : nama_ket from table_input_order
+@orders_bp.route('/api/get_nama_ket/<string:id_input>', methods=['GET'])
+def get_nama_ket(id_input):
+    """ Mendapatkan isi field nama_ket berdasarkan id_input dari table_input_order """
+    try:
+        id_input = id_input.strip()  # Hapus spasi atau karakter tersembunyi
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Query untuk mengambil nama_ket berdasarkan id_input
+        query = "SELECT nama_ket FROM table_input_order WHERE id_input = %s"
+        cursor.execute(query, (id_input,))
+        result = cursor.fetchone()
+
+        if not result:
+            return jsonify({"status": "error", "message": f"Data dengan id_input '{id_input}' tidak ditemukan"}), 404
+
+        return jsonify({"status": "success", "id_input": id_input, "nama_ket": result["nama_ket"]}), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Kesalahan sistem: {str(e)}"}), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # GET: Ambil semua data Dari table_produksi
 @orders_bp.route('/api/get_table_prod', methods=['GET'])
