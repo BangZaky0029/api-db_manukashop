@@ -131,6 +131,7 @@ def get_nama_ket(id_input):
 # Endpoint untuk mengambil semua data dari table_urgent
 @orders_bp.route('/api/get_table_urgent', methods=['GET'])
 def get_all_table_urgent():
+    conn = None  # Inisialisasi awal
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)

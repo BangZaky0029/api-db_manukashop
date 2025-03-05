@@ -2,10 +2,10 @@ import mysql.connector
 
 def get_db_connection():
     conn = mysql.connector.connect(
-        host="localhost",
+        host="192.168.0.27",
         user="root",
-        password="",
+        password="/BangZ@ky0029/",  # Password baru
         database="db_mnk",
-        autocommit=True  # Tambahkan autocommit di sini
+        autocommit=True
     )
     return conn

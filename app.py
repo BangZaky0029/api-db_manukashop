@@ -7,9 +7,8 @@ app = Flask(__name__)
 def home():
     return jsonify({"message": "WebSocket Flask API is running!"}), 200
 
-
 # Daftarkan blueprint API
 app.register_blueprint(api_bp)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)  # Akses dari luar jaringan lokal
